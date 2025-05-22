@@ -1,3 +1,5 @@
 clientes.py
 config.py
 caratula EECC.png
+.idea
+__pycache__

@@ -11,9 +11,14 @@ from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.units import inch
 from reportlab.lib.utils import ImageReader
 from io import BytesIO
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
 import pythoncom
 import config
 import clientes
+
+pdfmetrics.registerFont(TTFont("Calibri-Bold", "calibrib.ttf"))
+pdfmetrics.registerFont(TTFont("Calibri", "calibri.ttf"))
 
 # ================================
 # Códigos de clientes (solo numéricos)
@@ -76,7 +81,7 @@ def procesar_cliente(codigo_cliente):
             width, height = landscape(letter)
             imagen = ImageReader(imagen_path)
             c.drawImage(imagen, 4 * inch, 4 * inch, width=3.5*inch, preserveAspectRatio=True, mask='auto')
-            c.setFont("Helvetica-Bold", 16)
+            c.setFont("Calibri-Bold", 18)
             c.drawCentredString(width / 2, height / 2 - inch, texto)
             c.save()
 
@@ -158,7 +163,7 @@ def procesar_cliente(codigo_cliente):
             packet = BytesIO()
             can = canvas.Canvas(packet, pagesize=landscape(letter))
             footer = f"{i + 1}"
-            can.setFont("Helvetica", 9)
+            can.setFont("Calibri", 9)
             can.drawCentredString(11 * inch / 2, 0.4 * inch, footer)
             can.save()
 
@@ -192,6 +197,13 @@ def procesar_cliente(codigo_cliente):
             encrypted_writer.write(f)
 
         print(f"✅ PDF generado correctamente para cliente {codigo_padded}: {pdf_salida_con_footer}")
+
+        # Eliminar los archivos temporales
+        if os.path.exists(pdf_con_footer):
+            os.remove(pdf_con_footer)
+
+        if os.path.exists(pdf_salida_sin_footer):
+            os.remove(pdf_salida_sin_footer)
 
     finally:
         # ¡Muy importante! Cierra COM en este hilo
