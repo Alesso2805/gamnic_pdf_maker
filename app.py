@@ -25,21 +25,16 @@ pdfmetrics.registerFont(TTFont("Calibri", "calibri.ttf"))
 # ================================
 clientes = clientes.CLIENTES
 
-# Configurar el idioma a español
 locale.setlocale(locale.LC_TIME, "es_ES.UTF-8")
 
-# Obtener el mes y año anterior
 hoy = datetime.now()
 primer_dia_mes_actual = hoy.replace(day=1)
 mes_anterior = primer_dia_mes_actual - timedelta(days=1)
 
-# Mes anterior como string en español
 nombre_mes_anterior = mes_anterior.strftime("%B").capitalize()
 
-# Mes anterior como número con dos dígitos
 numero_mes_anterior = mes_anterior.strftime("%m")
 
-# Año anterior
 año_anterior = mes_anterior.year
 
 # ================================
@@ -51,7 +46,6 @@ hojas_deseadas = ["Indice", "Resumen", "Gráficos contribución mensual", "Resul
 # Función para procesar un cliente
 # ================================
 def procesar_cliente(codigo_cliente):
-    # Inicializa COM en el hilo actual
     pythoncom.CoInitialize()
 
     try:
@@ -87,7 +81,6 @@ def procesar_cliente(codigo_cliente):
 
         generar_caratula(ruta_caratula_generada, imagen_caratula, texto_caratula)
 
-        # 🧠 Ojo aquí estaba el error
         excel = win32com.client.Dispatch("Excel.Application")
         excel.Visible = False
         excel.AutomationSecurity = 3
@@ -114,19 +107,16 @@ def procesar_cliente(codigo_cliente):
             imagen = ImageReader(imagen_path)
 
             for i, page in enumerate(reader.pages):
-                if i == 0:  # Omitir la primera página
+                if i == 0:
                     writer.add_page(page)
                     continue
 
-                # Obtener dimensiones de la página
                 page_width = float(page.mediabox.width)
                 page_height = float(page.mediabox.height)
 
-                # Crear superposición con las mismas dimensiones
                 packet = BytesIO()
                 can = canvas.Canvas(packet, pagesize=(page_width, page_height))
 
-                # Insertar la imagen en la esquina inferior derecha
                 image_width = 1 * inch
                 image_height = image_width
                 can.drawImage(
@@ -140,7 +130,6 @@ def procesar_cliente(codigo_cliente):
                 )
                 can.save()
 
-                # Fusionar la superposición con la página original
                 packet.seek(0)
                 overlay = PdfReader(packet).pages[0]
                 page.merge_page(overlay)
@@ -156,7 +145,7 @@ def procesar_cliente(codigo_cliente):
         final_writer = PdfWriter()
 
         for i, page in enumerate(reader.pages):
-            if i < 2:  # Omitir las primeras dos páginas
+            if i < 2:
                 final_writer.add_page(page)
                 continue
 
@@ -172,15 +161,12 @@ def procesar_cliente(codigo_cliente):
             page.merge_page(overlay)
             final_writer.add_page(page)
 
-        # Primero agregamos el footer a cada página y guardamos en un archivo temporal
         pdf_con_footer = os.path.join(base_path, carpeta_cliente, "pdf_con_footer_temp.pdf")
         with open(pdf_con_footer, "wb") as f:
             final_writer.write(f)
 
-        # Luego agregamos la imagen a cada página y lo guardamos como pdf final
         agregar_imagen_a_paginas(pdf_con_footer, pdf_salida_con_footer, imagen_caratula)
 
-        # Finalmente ciframos el PDF final
         reader_final = PdfReader(pdf_salida_con_footer)
         encrypted_writer = PdfWriter()
 
@@ -198,7 +184,6 @@ def procesar_cliente(codigo_cliente):
 
         print(f"✅ PDF generado correctamente para cliente {codigo_padded}: {pdf_salida_con_footer}")
 
-        # Eliminar los archivos temporales
         if os.path.exists(pdf_con_footer):
             os.remove(pdf_con_footer)
 
@@ -206,7 +191,6 @@ def procesar_cliente(codigo_cliente):
             os.remove(pdf_salida_sin_footer)
 
     finally:
-        # ¡Muy importante! Cierra COM en este hilo
         pythoncom.CoUninitialize()
 
 # -------------------------------
