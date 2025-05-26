@@ -82,20 +82,18 @@ def procesar_cliente(codigo_cliente):
         generar_caratula(ruta_caratula_generada, imagen_caratula, texto_caratula)
 
         excel = win32com.client.Dispatch("Excel.Application")
-        excel.Visible = False
-        excel.AutomationSecurity = 3
+        excel.Visible = False  # Asegúrate de que Excel no sea visible
+        excel.DisplayAlerts = False  # Desactiva las alertas de Excel
 
         try:
             wb = excel.Workbooks.Open(archivo_excel, False, None, None, contraseña_excel)
             wb.Worksheets(hojas_deseadas).Select()
             wb.ActiveSheet.ExportAsFixedFormat(0, pdf_contenido)
-            wb.Close(False)
+            wb.Close(False)  # Cierra el archivo sin guardar
         except Exception as e:
             print(f"❌ Error con el cliente {codigo_padded}: {e}")
-            excel.Quit()
-            return
-
-        excel.Quit()
+        finally:
+            excel.Quit()  # Asegúrate de cerrar Excel
 
         writer = PdfWriter()
         writer.append(PdfReader(ruta_caratula_generada))
@@ -173,8 +171,15 @@ def procesar_cliente(codigo_cliente):
         for page in reader_final.pages:
             encrypted_writer.add_page(page)
 
+        # Determina la contraseña a usar
+        if codigo_padded == "055":
+            contraseña_pdf = config.CONTRA_055
+        else:
+            contraseña_pdf = contraseña_excel
+
+        # Encripta el PDF final
         encrypted_writer.encrypt(
-            user_password=contraseña_excel,
+            user_password=contraseña_pdf,
             owner_password=None,
             use_128bit=True
         )
