@@ -1,4 +1,5 @@
 import locale
+import re
 import os
 from datetime import timedelta, datetime
 from threading import Thread
@@ -19,6 +20,7 @@ import clientes
 
 pdfmetrics.registerFont(TTFont("Calibri-Bold", "calibrib.ttf"))
 pdfmetrics.registerFont(TTFont("Calibri", "calibri.ttf"))
+
 
 # ================================
 # Códigos de clientes (solo numéricos)
@@ -45,11 +47,13 @@ hojas_deseadas = ["Indice", "Resumen", "Gráficos contribución mensual", "Resul
 # ================================
 # Función para procesar un cliente
 # ================================
+
+# Python
 def procesar_cliente(codigo_cliente):
     pythoncom.CoInitialize()
 
     try:
-        codigo_padded = codigo_cliente.zfill(3)  # Asegura formato "092"
+        codigo_padded = codigo_cliente.zfill(3)  # Format "092"
         contraseña_excel = f"gamnic{codigo_padded}"
 
         base_path = config.BASE_PATH
@@ -62,138 +66,151 @@ def procesar_cliente(codigo_cliente):
             print(f"❌ No se encontró carpeta para el código {codigo_padded}")
             return
 
-        archivo_excel = os.path.join(base_path, carpeta_cliente, f"{codigo_padded} - Estado de Cuenta - Generador - copia.xlsm")
         ruta_caratula_generada = os.path.join(base_path, f"caratula_generada.pdf")
         imagen_caratula = config.IMAGEN_CARATULA
-        texto_caratula = f"{codigo_padded} – Portafolio Consolidado – {nombre_mes_anterior} {año_anterior}"
-        pdf_contenido = os.path.join(base_path, "temp_contenido.pdf")
-        pdf_salida_sin_footer = os.path.join(base_path, carpeta_cliente, "pdf_sin_pie.pdf")
-        pdf_salida_con_footer = os.path.join(base_path, carpeta_cliente, f"{codigo_padded} - {año_anterior} {numero_mes_anterior} - Estado de Cuenta.pdf")
 
+        # Search for all matching files in the folder
+        generadores = [
+            archivo for archivo in os.listdir(os.path.join(base_path, carpeta_cliente))
+            if archivo.startswith(f"{codigo_padded} - Estado de Cuenta - Generador") and archivo.endswith("- copia.xlsm")
+        ]
+
+        print(f"Archivos encontrados para el código {codigo_padded}: {generadores}")
+
+
+        # Generate the caratula
         def generar_caratula(path_salida, imagen_path, texto):
             c = canvas.Canvas(path_salida, pagesize=landscape(letter))
             width, height = landscape(letter)
             imagen = ImageReader(imagen_path)
-            c.drawImage(imagen, 4 * inch, 4 * inch, width=3.5*inch, preserveAspectRatio=True, mask='auto')
+            c.drawImage(imagen, 4 * inch, 4 * inch, width=3.5 * inch, preserveAspectRatio=True, mask='auto')
             c.setFont("Calibri-Bold", 18)
             c.drawCentredString(width / 2, height / 2 - inch, texto)
             c.save()
 
-        generar_caratula(ruta_caratula_generada, imagen_caratula, texto_caratula)
+        for archivo_excel in generadores:
+            match = re.search(r"Generador\s([A-Z]|Consolidado(?:\s\(([A-Z+]+)\))?)", archivo_excel)
+            if match and match.group(1):
+                generador_suffix = match.group(1).strip()
+            else:
+                generador_suffix = "Desconocido"
 
-        excel = win32com.client.Dispatch("Excel.Application")
-        excel.Visible = False  # Asegúrate de que Excel no sea visible
-        excel.DisplayAlerts = False  # Desactiva las alertas de Excel
+            texto_caratula = f"{codigo_padded} {generador_suffix} – Portafolio Consolidado – {nombre_mes_anterior} {año_anterior}"
 
-        try:
-            wb = excel.Workbooks.Open(archivo_excel, False, None, None, contraseña_excel)
-            wb.Worksheets(hojas_deseadas).Select()
-            wb.ActiveSheet.ExportAsFixedFormat(0, pdf_contenido)
-            wb.Close(False)  # Cierra el archivo sin guardar
-        except Exception as e:
-            print(f"❌ Error con el cliente {codigo_padded}: {e}")
-        finally:
-            excel.Quit()  # Asegúrate de cerrar Excel
+            ruta_caratula_generada = os.path.join(base_path, carpeta_cliente, f"caratula_{generador_suffix}.pdf")
 
-        writer = PdfWriter()
-        writer.append(PdfReader(ruta_caratula_generada))
-        writer.append(PdfReader(pdf_contenido))
+            generar_caratula(ruta_caratula_generada, imagen_caratula, texto_caratula)
 
-        def agregar_imagen_a_paginas(pdf_entrada, pdf_salida, imagen_path):
-            reader = PdfReader(pdf_entrada)
+            archivo_excel_path = os.path.join(base_path, carpeta_cliente, archivo_excel)
+            pdf_contenido = os.path.join(base_path, carpeta_cliente, f"temp_contenido_{archivo_excel}.pdf")
+            pdf_salida_sin_footer = os.path.join(base_path, carpeta_cliente, f"pdf_sin_pie_{archivo_excel}.pdf")
+            pdf_salida_con_footer = os.path.join(base_path,carpeta_cliente, f"{codigo_padded} - {año_anterior} {numero_mes_anterior} - Estado de Cuenta {generador_suffix}.pdf")
+            excel = win32com.client.Dispatch("Excel.Application")
+            excel.Visible = False  # Ensure Excel is not visible
+            excel.DisplayAlerts = False  # Disable Excel alerts
+
+            # Open the Excel file
+            try:
+                wb = excel.Workbooks.Open(archivo_excel_path, False, None, None, contraseña_excel)
+
+                # Log all available sheet names for debugging
+                available_sheets = [sheet.Name for sheet in wb.Worksheets]
+                print(f"📄 Hojas disponibles en '{archivo_excel}': {available_sheets}")
+
+                # Iterate over desired sheets and select them
+                for hoja in hojas_deseadas:
+                    try:
+                        wb.Worksheets(hoja).Select()
+                    except Exception as e:
+                        print(f"⚠️ Hoja '{hoja}' no encontrada o no accesible en el archivo '{archivo_excel}'. Error: {e}")
+                        continue  # Skip to the next sheet if not found
+
+                # Export the active sheet to PDF
+                wb.ActiveSheet.ExportAsFixedFormat(0, pdf_contenido)
+                wb.Close(False)  # Close the file without saving
+            except Exception as e:
+                print(f"❌ Error al procesar el archivo '{archivo_excel}': {e}")
+            finally:
+                excel.Quit()  # Ensure Excel is closed
+
+            # Combine caratula and content PDFs
             writer = PdfWriter()
-            imagen = ImageReader(imagen_path)
+            writer.append(PdfReader(ruta_caratula_generada))
+            writer.append(PdfReader(pdf_contenido))
 
-            for i, page in enumerate(reader.pages):
-                if i == 0:
-                    writer.add_page(page)
-                    continue
-
-                page_width = float(page.mediabox.width)
-                page_height = float(page.mediabox.height)
-
-                packet = BytesIO()
-                can = canvas.Canvas(packet, pagesize=(page_width, page_height))
-
-                image_width = 1 * inch
-                image_height = image_width
-                can.drawImage(
-                    imagen,
-                    page_width - image_width - 0.2 * inch,  # Posición X
-                    0.05 * inch,  # Posición Y
-                    width=image_width,
-                    height=image_height,
-                    preserveAspectRatio=True,
-                    mask='auto'
-                )
-                can.save()
-
-                packet.seek(0)
-                overlay = PdfReader(packet).pages[0]
-                page.merge_page(overlay)
-                writer.add_page(page)
-
-            with open(pdf_salida, "wb") as f:
+            with open(pdf_salida_sin_footer, "wb") as f:
                 writer.write(f)
 
-        with open(pdf_salida_sin_footer, "wb") as f:
-            writer.write(f)
+            def agregar_imagen_a_paginas(pdf_entrada, pdf_salida, imagen_path):
+                reader = PdfReader(pdf_entrada)
+                writer = PdfWriter()
+                imagen = ImageReader(imagen_path)
 
-        reader = PdfReader(pdf_salida_sin_footer)
-        final_writer = PdfWriter()
+                for i, page in enumerate(reader.pages):
+                    if i == 0:
+                        writer.add_page(page)
+                        continue
 
-        for i, page in enumerate(reader.pages):
-            if i < 2:
-                final_writer.add_page(page)
-                continue
+                    page_width = float(page.mediabox.width)
+                    page_height = float(page.mediabox.height)
 
-            packet = BytesIO()
-            can = canvas.Canvas(packet, pagesize=landscape(letter))
-            footer = f"{i + 1}"
-            can.setFont("Calibri", 9)
-            can.drawCentredString(11 * inch / 2, 0.4 * inch, footer)
-            can.save()
+                    packet = BytesIO()
+                    can = canvas.Canvas(packet, pagesize=(page_width, page_height))
 
-            packet.seek(0)
-            overlay = PdfReader(packet).pages[0]
-            page.merge_page(overlay)
-            final_writer.add_page(page)
+                    image_width = 1 * inch
+                    image_height = image_width
+                    can.drawImage(
+                        imagen,
+                        page_width - image_width - 0.2 * inch,  # Posición X
+                        0.05 * inch,  # Posición Y
+                        width=image_width,
+                        height=image_height,
+                        preserveAspectRatio=True,
+                        mask='auto'
+                    )
+                    can.save()
 
-        pdf_con_footer = os.path.join(base_path, carpeta_cliente, "pdf_con_footer_temp.pdf")
-        with open(pdf_con_footer, "wb") as f:
-            final_writer.write(f)
+                    packet.seek(0)
+                    overlay = PdfReader(packet).pages[0]
+                    page.merge_page(overlay)
+                    writer.add_page(page)
 
-        agregar_imagen_a_paginas(pdf_con_footer, pdf_salida_con_footer, imagen_caratula)
+                with open(pdf_salida, "wb") as f:
+                    writer.write(f)
 
-        reader_final = PdfReader(pdf_salida_con_footer)
-        encrypted_writer = PdfWriter()
+            agregar_imagen_a_paginas(pdf_salida_sin_footer, pdf_salida_con_footer, imagen_caratula)
 
-        for page in reader_final.pages:
-            encrypted_writer.add_page(page)
+            # Encrypt the final PDF
+            reader_final = PdfReader(pdf_salida_con_footer)
+            encrypted_writer = PdfWriter()
 
-        # Determina la contraseña a usar
-        if codigo_padded == "055":
-            contraseña_pdf = config.CONTRA_055
-        else:
-            contraseña_pdf = contraseña_excel
+            for page in reader_final.pages:
+                encrypted_writer.add_page(page)
 
-        # Encripta el PDF final
-        encrypted_writer.encrypt(
-            user_password=contraseña_pdf,
-            owner_password=None,
-            use_128bit=True
-        )
+            # Determine the password to use
+            if codigo_padded == "055":
+                contraseña_pdf = config.CONTRA_055
+            else:
+                contraseña_pdf = contraseña_excel
 
-        with open(pdf_salida_con_footer, "wb") as f:
-            encrypted_writer.write(f)
+            encrypted_writer.encrypt(
+                user_password=contraseña_pdf,
+                owner_password=None,
+                use_128bit=True
+            )
 
-        print(f"✅ PDF generado correctamente para cliente {codigo_padded}: {pdf_salida_con_footer}")
+            with open(pdf_salida_con_footer, "wb") as f:
+                encrypted_writer.write(f)
 
-        if os.path.exists(pdf_con_footer):
-            os.remove(pdf_con_footer)
+            print(f"✅ PDF generado correctamente para cliente {codigo_padded}, archivo {archivo_excel}: {pdf_salida_con_footer}")
 
-        if os.path.exists(pdf_salida_sin_footer):
-            os.remove(pdf_salida_sin_footer)
+            # Clean up temporary files
+            if os.path.exists(pdf_contenido):
+                os.remove(pdf_contenido)
+            if os.path.exists(pdf_salida_sin_footer):
+                os.remove(pdf_salida_sin_footer)
+            if os.path.exists(ruta_caratula_generada):
+                os.remove(ruta_caratula_generada)
 
     finally:
         pythoncom.CoUninitialize()
