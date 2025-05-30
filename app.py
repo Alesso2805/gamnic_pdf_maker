@@ -215,7 +215,7 @@ def procesar_cliente(codigo_cliente):
                 imagen = ImageReader(imagen_path)
 
                 for i, page in enumerate(reader.pages):
-                    if i <= 1:
+                    if i == 0:
                         writer.add_page(page)
                         continue
 
@@ -323,8 +323,11 @@ def ejecutar_seleccionados():
         return
 
     def run():
+        ventana.withdraw()  # Oculta la ventana
         for codigo in seleccionados:
             procesar_cliente(codigo)
+        ventana.deiconify()  # Muestra la ventana de nuevo
+        lista_codigos.selection_clear(0, tk.END)  # Limpia la selección
         messagebox.showinfo("Proceso terminado", "Se completó la generación de PDFs.")
 
     Thread(target=run).start()
