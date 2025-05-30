@@ -42,8 +42,41 @@ año_anterior = mes_anterior.year
 # ================================
 # Hojas deseadas para exportar
 # ================================
-hojas_deseadas = ["Indice", "Resumen", "Gráficos contribución mensual", "Resultados", "Consolidado", "Movimientos", "Global"]
 
+def obtener_hojas_deseadas(wb):
+    try:
+        hoja_indice = wb.Worksheets("Indice")
+        contenido_indice = []
+
+        # Leer todas las celdas de la hoja Indice
+        for fila in range(1, hoja_indice.UsedRange.Rows.Count + 1):
+            for columna in range(1, hoja_indice.UsedRange.Columns.Count + 1):
+                valor_celda = hoja_indice.Cells(fila, columna).Value
+                if valor_celda:
+                    contenido_indice.append(str(valor_celda))
+
+        # Determinar las hojas a extraer basándose en el contenido de Indice
+        hojas_dinamicas = []
+        if any("Resumen de Resultados" in texto for texto in contenido_indice):
+            hojas_dinamicas.append("Resumen")
+        if any("Contribuciones al Portafolio" in texto for texto in contenido_indice):
+            hojas_dinamicas.append("Gráficos contribución mensual")
+        if any("Detalle de Resultados" in texto for texto in contenido_indice):
+            hojas_dinamicas.append("Resultados")
+        if any("Portafolio Global - Composición" in texto for texto in contenido_indice):
+            hojas_dinamicas.append("Consolidado")
+        if any("Movimientos del Mes" in texto for texto in contenido_indice):
+            hojas_dinamicas.append("Movimientos")
+        if any("Portafolio Global - Detalle" in texto for texto in contenido_indice):
+            hojas_dinamicas.append("Global")
+        # Agrega más condiciones según sea necesario
+
+        print(f"📄 Hojas dinámicas determinadas: {hojas_dinamicas}")
+        return hojas_dinamicas
+
+    except Exception as e:
+        print(f"❌ Error al leer la hoja Indice: {e}")
+        return []
 # ================================
 # Función para procesar un cliente
 # ================================
@@ -93,7 +126,7 @@ def procesar_cliente(codigo_cliente):
             if match and match.group(1):
                 generador_suffix = match.group(1).strip()
             else:
-                generador_suffix = "Desconocido"
+                generador_suffix = ""
 
             texto_caratula = f"{codigo_padded} {generador_suffix} – Portafolio Consolidado – {nombre_mes_anterior} {año_anterior}"
 
@@ -108,30 +141,55 @@ def procesar_cliente(codigo_cliente):
             excel = win32com.client.Dispatch("Excel.Application")
             excel.Visible = False  # Ensure Excel is not visible
             excel.DisplayAlerts = False  # Disable Excel alerts
+            excel.AutomationSecurity = 3  # Disable macros (1 = msoAutomationSecurityLow, 2 = msoAutomationSecurityByUI, 3 = msoAutomationSecurityForceDisable)
 
             # Open the Excel file
             try:
-                wb = excel.Workbooks.Open(archivo_excel_path, False, None, None, contraseña_excel)
-
-                # Log all available sheet names for debugging
+                wb = excel.Workbooks.Open(
+                    os.path.join(base_path, carpeta_cliente, archivo_excel),
+                    False,  # UpdateLinks
+                    False,  # ReadOnly
+                    None,  # Format
+                    contraseña_excel,  # Password
+                    None,  # WriteResPassword
+                    True,  # IgnoreReadOnlyRecommended
+                    None,  # Origin
+                    None,  # Delimiter
+                    False,  # Editable
+                    False,  # Notify
+                    None,  # Converter
+                    False,  # AddToMru
+                    None,  # Local
+                    None  # CorruptLoad
+                )         # Log all available sheet names for debugging
                 available_sheets = [sheet.Name for sheet in wb.Worksheets]
                 print(f"📄 Hojas disponibles en '{archivo_excel}': {available_sheets}")
 
-                # Iterate over desired sheets and select them
-                for hoja in hojas_deseadas:
-                    try:
-                        wb.Worksheets(hoja).Select()
-                    except Exception as e:
-                        print(f"⚠️ Hoja '{hoja}' no encontrada o no accesible en el archivo '{archivo_excel}'. Error: {e}")
-                        continue  # Skip to the next sheet if not found
+                hojas_dinamicas = obtener_hojas_deseadas(wb)
 
-                # Export the active sheet to PDF
+                # Select sheets
+                first_sheet = True
+                for hoja in hojas_dinamicas:
+                    try:
+                        if first_sheet:
+                            wb.Worksheets(hoja).Select()
+                            first_sheet = False
+                        else:
+                            wb.Worksheets(hoja).Select(Replace=False)
+                    except Exception as e:
+                        print(f"⚠️ Hoja '{hoja}' no encontrada: {e}")
+                        continue
+
+                # Export to PDF
+                pdf_contenido = os.path.join(base_path, carpeta_cliente, f"temp_contenido_{codigo_padded}.pdf")
                 wb.ActiveSheet.ExportAsFixedFormat(0, pdf_contenido)
-                wb.Close(False)  # Close the file without saving
+                wb.Close(False)
+
             except Exception as e:
-                print(f"❌ Error al procesar el archivo '{archivo_excel}': {e}")
+                print(f"❌ Error al procesar Excel: {e}")
+                raise  # Re-raise the exception to see full details
             finally:
-                excel.Quit()  # Ensure Excel is closed
+                excel.Quit()
 
             # Combine caratula and content PDFs
             writer = PdfWriter()
@@ -187,20 +245,27 @@ def procesar_cliente(codigo_cliente):
             for page in reader_final.pages:
                 encrypted_writer.add_page(page)
 
-            # Determine the password to use
+            # Determinar la contraseña a usar
             if codigo_padded == "055":
                 contraseña_pdf = config.CONTRA_055
             else:
                 contraseña_pdf = contraseña_excel
 
-            encrypted_writer.encrypt(
-                user_password=contraseña_pdf,
-                owner_password=None,
-                use_128bit=True
-            )
+            # Aplicar la encriptación
+            try:
+                encrypted_writer.encrypt(
+                    user_password=contraseña_pdf,
+                    owner_password=None,
+                    use_128bit=True
+                )
 
-            with open(pdf_salida_con_footer, "wb") as f:
-                encrypted_writer.write(f)
+                # Guardar el archivo encriptado
+                with open(pdf_salida_con_footer, "wb") as f:
+                    encrypted_writer.write(f)
+
+                print(f"✅ PDF encriptado correctamente: {pdf_salida_con_footer}")
+            except Exception as e:
+                print(f"❌ Error al encriptar el PDF: {e}")
 
             print(f"✅ PDF generado correctamente para cliente {codigo_padded}, archivo {archivo_excel}: {pdf_salida_con_footer}")
 
