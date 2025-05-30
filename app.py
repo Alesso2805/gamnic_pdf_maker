@@ -39,6 +39,7 @@ numero_mes_anterior = mes_anterior.strftime("%m")
 
 año_anterior = mes_anterior.year
 
+
 # ================================
 # Hojas deseadas para exportar
 # ================================
@@ -102,11 +103,15 @@ def procesar_cliente(codigo_cliente):
             None
         )
 
+        nombre_carpeta_salida = f"{codigo_padded} - {año_anterior} {numero_mes_anterior} - copia"
+        ruta_carpeta_salida = os.path.join(base_path, carpeta_cliente, nombre_carpeta_salida)
+        os.makedirs(ruta_carpeta_salida, exist_ok=True)
+
         if not carpeta_cliente:
             print(f"❌ No se encontró carpeta para el código {codigo_padded}")
             return
 
-        ruta_caratula_generada = os.path.join(base_path, f"caratula_generada.pdf")
+        ruta_caratula_generada = os.path.join(ruta_carpeta_salida, f"caratula_generada.pdf")
         imagen_caratula = config.IMAGEN_CARATULA
 
         # Search for all matching files in the folder
@@ -137,14 +142,12 @@ def procesar_cliente(codigo_cliente):
 
             texto_caratula = f"{codigo_padded} {generador_suffix} – Portafolio Consolidado – {nombre_mes_anterior} {año_anterior}"
 
-            ruta_caratula_generada = os.path.join(base_path, carpeta_cliente, f"caratula_{generador_suffix}.pdf")
+            ruta_caratula_generada = os.path.join(ruta_carpeta_salida, f"caratula_{generador_suffix}.pdf")
 
             generar_caratula(ruta_caratula_generada, imagen_caratula, texto_caratula)
 
-            archivo_excel_path = os.path.join(base_path, carpeta_cliente, archivo_excel)
-            pdf_contenido = os.path.join(base_path, carpeta_cliente, f"temp_contenido_{archivo_excel}.pdf")
-            pdf_salida_sin_footer = os.path.join(base_path, carpeta_cliente, f"pdf_sin_pie_{archivo_excel}.pdf")
-            pdf_con_footer = os.path.join(base_path,carpeta_cliente, f"{codigo_padded} - {año_anterior} {numero_mes_anterior} - Estado de Cuenta {generador_suffix}.pdf")
+            pdf_salida_sin_footer = os.path.join(ruta_carpeta_salida, f"pdf_sin_pie_{archivo_excel}.pdf")
+            pdf_con_footer = os.path.join(ruta_carpeta_salida, f"{codigo_padded} - {año_anterior} {numero_mes_anterior} - Estado de Cuenta - Portafolio {generador_suffix}.pdf")
             excel = win32com.client.Dispatch("Excel.Application")
             excel.Visible = False  # Ensure Excel is not visible
             excel.DisplayAlerts = False  # Disable Excel alerts
@@ -188,7 +191,7 @@ def procesar_cliente(codigo_cliente):
                         continue
 
                 # Export to PDF
-                pdf_contenido = os.path.join(base_path, carpeta_cliente, f"temp_contenido_{codigo_padded}.pdf")
+                pdf_contenido = os.path.join(ruta_carpeta_salida, f"temp_contenido_{codigo_padded}.pdf")
                 wb.ActiveSheet.ExportAsFixedFormat(0, pdf_contenido)
                 wb.Close(False)
 
