@@ -56,7 +56,7 @@ def obtener_hojas_deseadas(wb):
                     contenido_indice.append(str(valor_celda))
 
         # Determinar las hojas a extraer basándose en el contenido de Indice
-        hojas_dinamicas = []
+        hojas_dinamicas = ["Indice"]
         if any("Resumen de Resultados" in texto for texto in contenido_indice):
             hojas_dinamicas.append("Resumen")
         if any("Contribuciones al Portafolio" in texto for texto in contenido_indice):
