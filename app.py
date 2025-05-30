@@ -129,7 +129,7 @@ def procesar_cliente(codigo_cliente):
             c.save()
 
         for archivo_excel in generadores:
-            match = re.search(r"Generador\s([A-Z]|Consolidado(?:\s\(([A-Z+]+)\))?)", archivo_excel)
+            match = re.search(r"Generador\s(.+?)\s-\s+copia\.xlsm$", archivo_excel)
             if match and match.group(1):
                 generador_suffix = match.group(1).strip()
             else:
