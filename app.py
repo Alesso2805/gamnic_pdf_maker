@@ -48,14 +48,21 @@ def obtener_hojas_deseadas(wb):
         hoja_indice = wb.Worksheets("Indice")
         contenido_indice = []
 
-        # Leer todas las celdas de la hoja Indice
-        for fila in range(1, hoja_indice.UsedRange.Rows.Count + 1):
-            for columna in range(1, hoja_indice.UsedRange.Columns.Count + 1):
-                valor_celda = hoja_indice.Cells(fila, columna).Value
+        print_area = hoja_indice.PageSetup.PrintArea
+        if not print_area:
+            print("⚠️ No hay área de impresión definida en la hoja Indice.")
+            return []
+
+        rango = hoja_indice.Range(print_area)
+        for fila in range(1, rango.Rows.Count + 1):
+            # Verifica si la fila está oculta
+            if rango.Rows(fila).EntireRow.Hidden:
+                continue
+            for columna in range(1, rango.Columns.Count + 1):
+                valor_celda = rango.Cells(fila, columna).Value
                 if valor_celda:
                     contenido_indice.append(str(valor_celda))
 
-        # Determinar las hojas a extraer basándose en el contenido de Indice
         hojas_dinamicas = ["Indice"]
         if any("Resumen de Resultados" in texto for texto in contenido_indice):
             hojas_dinamicas.append("Resumen")
@@ -69,8 +76,8 @@ def obtener_hojas_deseadas(wb):
             hojas_dinamicas.append("Movimientos")
         if any("Portafolio Global - Detalle" in texto for texto in contenido_indice):
             hojas_dinamicas.append("Global")
-        # Agrega más condiciones según sea necesario
 
+        print(contenido_indice)
         print(f"📄 Hojas dinámicas determinadas: {hojas_dinamicas}")
         return hojas_dinamicas
 
@@ -137,7 +144,7 @@ def procesar_cliente(codigo_cliente):
             archivo_excel_path = os.path.join(base_path, carpeta_cliente, archivo_excel)
             pdf_contenido = os.path.join(base_path, carpeta_cliente, f"temp_contenido_{archivo_excel}.pdf")
             pdf_salida_sin_footer = os.path.join(base_path, carpeta_cliente, f"pdf_sin_pie_{archivo_excel}.pdf")
-            pdf_salida_con_footer = os.path.join(base_path,carpeta_cliente, f"{codigo_padded} - {año_anterior} {numero_mes_anterior} - Estado de Cuenta {generador_suffix}.pdf")
+            pdf_con_footer = os.path.join(base_path,carpeta_cliente, f"{codigo_padded} - {año_anterior} {numero_mes_anterior} - Estado de Cuenta {generador_suffix}.pdf")
             excel = win32com.client.Dispatch("Excel.Application")
             excel.Visible = False  # Ensure Excel is not visible
             excel.DisplayAlerts = False  # Disable Excel alerts
@@ -205,7 +212,7 @@ def procesar_cliente(codigo_cliente):
                 imagen = ImageReader(imagen_path)
 
                 for i, page in enumerate(reader.pages):
-                    if i == 0:
+                    if i <= 1:
                         writer.add_page(page)
                         continue
 
@@ -233,13 +240,36 @@ def procesar_cliente(codigo_cliente):
                     page.merge_page(overlay)
                     writer.add_page(page)
 
-                with open(pdf_salida, "wb") as f:
+                with open(pdf_salida, 'wb') as f:
                     writer.write(f)
 
-            agregar_imagen_a_paginas(pdf_salida_sin_footer, pdf_salida_con_footer, imagen_caratula)
+            agregar_imagen_a_paginas(pdf_salida_sin_footer, pdf_con_footer, imagen_caratula)
+
+            reader = PdfReader(pdf_con_footer)
+            final_writer = PdfWriter()
+
+            for i, page in enumerate(reader.pages):
+                if i < 2:
+                    final_writer.add_page(page)
+                    continue
+
+                packet = BytesIO()
+                can = canvas.Canvas(packet, pagesize=landscape(letter))
+                footer = f"{i + 1}"
+                can.setFont("Calibri", 9)
+                can.drawCentredString(11 * inch / 2, 0.4 * inch, footer)
+                can.save()
+
+                packet.seek(0)
+                overlay = PdfReader(packet).pages[0]
+                page.merge_page(overlay)
+                final_writer.add_page(page)
+
+            with open(pdf_con_footer, "wb") as f:
+                final_writer.write(f)
 
             # Encrypt the final PDF
-            reader_final = PdfReader(pdf_salida_con_footer)
+            reader_final = PdfReader(pdf_con_footer)
             encrypted_writer = PdfWriter()
 
             for page in reader_final.pages:
@@ -260,14 +290,14 @@ def procesar_cliente(codigo_cliente):
                 )
 
                 # Guardar el archivo encriptado
-                with open(pdf_salida_con_footer, "wb") as f:
+                with open(pdf_con_footer, "wb") as f:
                     encrypted_writer.write(f)
 
-                print(f"✅ PDF encriptado correctamente: {pdf_salida_con_footer}")
+                print(f"✅ PDF encriptado correctamente: {pdf_con_footer}")
             except Exception as e:
                 print(f"❌ Error al encriptar el PDF: {e}")
 
-            print(f"✅ PDF generado correctamente para cliente {codigo_padded}, archivo {archivo_excel}: {pdf_salida_con_footer}")
+            print(f"✅ PDF generado correctamente para cliente {codigo_padded}, archivo {archivo_excel}: {pdf_con_footer}")
 
             # Clean up temporary files
             if os.path.exists(pdf_contenido):
