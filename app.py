@@ -79,6 +79,10 @@ def obtener_hojas_deseadas(wb):
             hojas_dinamicas.append("Detalle por Vehículos")
         if any("Portafolio Global - Detalle" in texto for texto in contenido_indice):
             hojas_dinamicas.append("Global")
+        if any("Portafolios Personales" in texto for texto in contenido_indice):
+            hojas_dinamicas.append("Portafolios Personales")
+        if any("Detalle de Rendimiento y Evolución de Portafolio por Año" in texto for texto in contenido_indice):
+            hojas_dinamicas.append("Evolución Anual")
         print(contenido_indice)
         print(f"📄 Hojas dinámicas determinadas: {hojas_dinamicas}")
         return hojas_dinamicas
