@@ -71,6 +71,8 @@ def obtener_hojas_deseadas(wb):
             hojas_dinamicas.append("Gráficos contribución mensual")
         if any("Detalle de Resultados" in texto for texto in contenido_indice):
             hojas_dinamicas.append("Resultados")
+        if any("Referencias de Mercado" in texto for texto in contenido_indice):
+            hojas_dinamicas.append("Referencias de Mercado")
         if any("Portafolio Global - Composición" in texto for texto in contenido_indice):
             hojas_dinamicas.append("Consolidado")
         if any("Movimientos del Mes" in texto for texto in contenido_indice):
